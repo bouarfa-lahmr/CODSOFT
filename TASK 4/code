@@ -1,0 +1,152 @@
+import numpy as np
+from collections import defaultdict
+from sklearn.metrics.pairwise import cosine_similarity
+
+class RecommendationSystem:
+    def __init__(self):
+        
+        self.ratings = {
+            'User1': {'Movie1': 5, 'Movie2': 3, 'Movie3': 4, 'Movie4': 4},
+            'User2': {'Movie1': 4, 'Movie2': 5, 'Movie5': 5, 'Movie6': 3},
+            'User3': {'Movie2': 2, 'Movie3': 5, 'Movie4': 4, 'Movie6': 4},
+            'User4': {'Movie1': 3, 'Movie3': 4, 'Movie5': 3, 'Movie6': 5},
+            'User5': {'Movie2': 5, 'Movie4': 4, 'Movie5': 4, 'Movie6': 3}
+        }
+        self.item_names = {
+            'Movie1': 'The Shawshank Redemption',
+            'Movie2': 'The Godfather',
+            'Movie3': 'The Dark Knight',
+            'Movie4': 'Pulp Fiction',
+            'Movie5': 'Fight Club',
+            'Movie6': 'Forrest Gump'
+        }
+        self.user_similarity = None
+        self.precompute_similarities()
+
+    def precompute_similarities(self):
+        """Precompute user-user similarity matrix"""
+        
+        users = list(self.ratings.keys())
+        items = list({item for user in self.ratings.values() for item in user.keys()})
+        
+        
+        user_vectors = []
+        for user in users:
+            vector = [self.ratings[user].get(item, 0) for item in items]
+            user_vectors.append(vector)
+        
+        
+        self.user_similarity = cosine_similarity(user_vectors)
+        self.user_index = {user: idx for idx, user in enumerate(users)}
+        self.item_index = {item: idx for idx, item in enumerate(items)}
+        self.index_item = {idx: item for item, idx in self.item_index.items()}
+
+    def recommend_items(self, target_user, n_recommendations=3):
+        """Generate recommendations for a target user"""
+        if target_user not in self.ratings:
+            return ["New user detected. Please rate some items to get recommendations."]
+        
+        
+        target_idx = self.user_index[target_user]
+        similar_users = []
+        
+        for user, idx in self.user_index.items():
+            if user != target_user:
+                similarity = self.user_similarity[target_idx][idx]
+                similar_users.append((user, similarity))
+        
+        
+        similar_users.sort(key=lambda x: x[1], reverse=True)
+        
+        
+        recommendations = defaultdict(float)
+        target_items = set(self.ratings[target_user].keys())
+        
+        for user, similarity in similar_users:
+            for item, rating in self.ratings[user].items():
+                if item not in target_items:
+                    recommendations[item] += rating * similarity
+        
+        
+        sorted_recommendations = sorted(recommendations.items(), key=lambda x: x[1], reverse=True)
+        
+       
+        return [(self.item_names[item], score) for item, score in sorted_recommendations[:n_recommendations]]
+
+    def add_rating(self, user, item, rating):
+        """Add a new rating to the system"""
+        if user not in self.ratings:
+            self.ratings[user] = {}
+        self.ratings[user][item] = rating
+        self.precompute_similarities()   
+
+    def get_unrated_items(self, user):
+        """Get items not rated by a user"""
+        rated_items = set(self.ratings.get(user, {}).keys())
+        all_items = set(self.item_names.keys())
+        return all_items - rated_items
+
+def main():
+    rs = RecommendationSystem()
+    
+    print("Welcome to Movie Recommendation System!")
+    print("Available movies:")
+    for id, name in rs.item_names.items():
+        print(f"{id}: {name}")
+    
+    while True:
+        print("\nOptions:")
+        print("1. Get recommendations for a user")
+        print("2. Add a new rating")
+        print("3. Exit")
+        
+        choice = input("Enter your choice: ")
+        
+        if choice == '1':
+            user = input("Enter user ID (User1-User5 or new user): ")
+            recommendations = rs.recommend_items(user)
+            
+            if isinstance(recommendations[0], str):
+                print(recommendations[0])
+            else:
+                print(f"\nRecommendations for {user}:")
+                for movie, score in recommendations:
+                    print(f"- {movie} (score: {score:.2f})")
+        
+        elif choice == '2':
+            user = input("Enter user ID: ")
+            unrated = rs.get_unrated_items(user)
+            
+            if not unrated:
+                print("User has rated all available movies.")
+                continue
+                
+            print(f"Unrated movies for {user}:")
+            for item in unrated:
+                print(f"{item}: {rs.item_names[item]}")
+            
+            item = input("Enter movie ID to rate: ")
+            if item not in rs.item_names:
+                print("Invalid movie ID")
+                continue
+                
+            try:
+                rating = float(input(f"Enter rating for {rs.item_names[item]} (1-5): "))
+                if rating < 1 or rating > 5:
+                    raise ValueError
+            except ValueError:
+                print("Invalid rating. Please enter a number between 1 and 5.")
+                continue
+                
+            rs.add_rating(user, item, rating)
+            print("Rating added successfully!")
+        
+        elif choice == '3':
+            print("Goodbye!")
+            break
+        
+        else:
+            print("Invalid choice. Please try again.")
+
+if __name__ == "__main__":
+    main()
